@@ -139,6 +139,13 @@ section .data
 	score_str db 'SCORE: '
 	score_str_val db '00000', 0
 
+	start_hint db 'Press SPACE to start!', 0
+	over_hint db 'GAME OVER', 0
+
+	current_hint dw start_hint
+	current_hint_color db FGC_LGREEN
+
+	is_game_started db 0
 	is_game_over db 0
 
 ; ---------------- TEXT SECTION ---------------- ;
@@ -169,11 +176,16 @@ game_update:
 	call game_loop_print_map
 	call game_loop_print_score
 	call game_loop_update_player
+
+	cmp [is_game_started], byte 0
+	je game_post_update
 	call game_loop_update_obstacles
+	
 	mov [player_direction], byte 0
 	inc word [score]
 
 game_post_update:
+	call game_loop_print_hint
 	call game_loop_wait
 	jmp game_loop
 
@@ -211,13 +223,23 @@ no_down_pressed:
 	ret
 no_left_pressed:
 
+	cmp al, ' '
+	jne no_space_pressed
+	cmp [is_game_over], byte 1
+	je exit_game
+	mov [is_game_started], byte 1
+	ret
+no_space_pressed:
+
 	cmp ah, 0x01				; Escape key
-	jne no_keys_pressed
-	set_func F_EXIT
-	int DOS_API
+	je exit_game
 
 no_keys_pressed:
 	ret
+
+exit_game:
+	set_func F_EXIT
+	int DOS_API
 
 ; ---------------- Print Map ---------------- ;
 
@@ -230,6 +252,8 @@ game_loop_print_map:
 ; ---------------- Update Player ---------------- ;
 
 game_loop_update_player:
+	cmp [is_game_started], word 0
+	je update_player_end
 	mov al, [player_direction]
 
 	cmp al, 1
@@ -366,16 +390,19 @@ game_loop_print_score:
 	mov cx, 2
 	xor si, si
 
-print_next_chr:
+print_score_next_chr:
 	set_curpos cl, MAP_UPPER_WALL-2
 	push cx
 	print_chr [score_str+si], BGC_GRAY
 	pop cx
 
+	cmp [score_str+si], byte 0
+	je print_score_end
 	inc cx
 	inc si
-	cmp [score_str+si], byte 0
-	jne print_next_chr
+	jmp print_score_next_chr
+
+print_score_end:
 	ret
 
 ; ---------------- Convert Score to String ---------------- ;
@@ -397,6 +424,52 @@ next_digit:
 	jne next_digit
 	ret
 
+; ---------------- Print Hint ---------------- ;
+
+game_loop_print_hint:
+	cmp [is_game_started], byte 0
+	sete al
+	cmp [is_game_over], byte 0
+	setne ah
+	or al, ah
+	cmp al, 0
+	je print_hint_end
+
+	mov bp, [current_hint]
+	xor ax, ax
+	xor dx, dx
+	xor si, si
+
+count_hint_chr:
+	mov dl, [bp+si]
+	inc ax
+	inc si
+	cmp dl, 0
+	jne count_hint_chr
+
+	mov bx, 2
+	xor dx, dx
+	div bx
+
+	mov cx, WIDTH/2
+	sub cx, ax
+	xor si, si
+
+print_hint_next_chr:
+	set_curpos cl, HEIGHT/2
+	push cx
+	print_chr [bp+si], [current_hint_color]
+	pop cx
+
+	cmp [bp+si], byte 0
+	je print_hint_end
+	inc cx
+	inc si
+	jmp print_hint_next_chr
+
+print_hint_end:
+	ret
+
 ; ---------------- Wait ---------------- ;
 
 game_loop_wait:
@@ -409,6 +482,7 @@ game_loop_wait:
 ; ---------------- Game Over ---------------- ;
 
 game_over:
-	; TODO: Game over screen instead of exit
+	mov [current_hint], word over_hint
+	mov [current_hint_color], byte FGC_RED
 	mov [is_game_over], byte 1
 	ret
