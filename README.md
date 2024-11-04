@@ -21,3 +21,8 @@ make run
 make dbg
 ```
 > This requires debug.exe to be present within DOSBox.
+
+### Game Controls
+Your player character `☺` can be moved with the `W` `A` `S` `D` keys.\
+The obstacles `◄` move from right to left that you need to avoid.\
+You can exit the game by pressing `Esc`.
